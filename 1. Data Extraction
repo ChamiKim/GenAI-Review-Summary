@@ -39,3 +39,13 @@ JOIN VALID_SESSIONS B
 ON A.SESS_ID = B.SESS_ID
 WHERE A.STND_YMD BETWEEN '2024-01-01' AND '2024-03-31'
   AND A.SITE_ID IN ('UA-110770460-3', 'UA-110770460-1');
+
+
+
+[
+  "{\"prd_seq\":1,\"prd_cd\":\"110770000381\",\"prd_nm\":\"[P] 메타그린 골드  210T_2입세트 (70일)\",\"prd_brnd_nm\":\"바이탈뷰티\",\"prd_tp_cat_vl\":\"(not set)\",\"prd_qty\":null,\"prd_loc\":0,\"prd_sal_prc\":44000,\"prd_optn\":\"메타그린 골드 210T_2입세트\",\"exps_prd_scen_id\":null,\"acml_bt_pt\":null,\"prd_norm_prc\":110000}",
+  "{\"prd_seq\":1,\"prd_cd\":\"110770000455\",\"prd_nm\":\"[P][역직구] 슈퍼콜라겐젤리(30EA)(유통기한 임박상품)\",\"prd_brnd_nm\":\"바이탈뷰티\",\"prd_tp_cat_vl\":\"(not set)\",\"prd_qty\":null,\"prd_loc\":0,\"prd_sal_prc\":9000,\"prd_optn\":\"슈퍼콜라겐 젤리 30EA\",\"exps_prd_scen_id\":null,\"acml_bt_pt\":null,\"prd_norm_prc\":45000}",
+  "{\"prd_seq\":1,\"prd_cd\":\"111070001437\",\"prd_nm\":\"[P] 옴므 웜업 쉐이브 젤 60g\",\"prd_brnd_nm\":\"헤라\",\"prd_tp_cat_vl\":\"(not set)\",\"prd_qty\":null,\"prd_loc\":0,\"prd_sal_prc\":5250,\"prd_optn\":\"헤라 옴므 웜업 쉐이브 젤 60g\",\"exps_prd_scen_id\":null,\"acml_bt_pt\":null,\"prd_norm_prc\":15000}",
+  "{\"prd_seq\":1,\"prd_cd\":\"111170001144\",\"prd_nm\":\"[P] 윤조마스크 5매\",\"prd_brnd_nm\":\"설화수\",\"prd_tp_cat_vl\":\"(not set)\",\"prd_qty\":null,\"prd_loc\":0,\"prd_sal_prc\":22200,\"prd_optn\":\"윤조마스크 5매\",\"exps_prd_scen_id\":null,\"acml_bt_pt\":null,\"prd_norm_prc\":60000}",
+  "{\"prd_seq\":1,\"prd_cd\":\"310050000282\",\"prd_nm\":\"[P] 치석 구취 마우스 워시 700ml\",\"prd_brnd_nm\":\"메디안\",\"prd_tp_cat_vl\":\"(not set)\",\"prd_qty\":null,\"prd_loc\":0,\"prd_sal_prc\":2480,\"prd_optn\":\"치석 구취 마우스 워시 700ml\",\"exps_prd_scen_id\":null,\"acml_bt_pt\":null,\"prd_norm_prc\":7500}"
+]

@@ -18,3 +18,24 @@ WHERE SITE_ID IN ('UA-110770460-3', 'UA-110770460-1')
 -- 분석에 사용할 퍼널 정보
 SELECT *
 FROM LOGS;
+
+-- 	상품(EVNT_NM = 'product')을 본 사용자가 장바구니(addToCart) 또는 구매(purchase)로 전환하지 않고 이탈한 비율을 확인
+
+product_users AS (
+    SELECT 
+        SESS_ID,
+        MAX(CASE WHEN EVNT_NM = 'product' THEN 1 ELSE 0 END) AS viewed_product,
+        MAX(CASE WHEN EVNT_NM = 'addToCart' THEN 1 ELSE 0 END) AS added_to_cart,
+        MAX(CASE WHEN EVNT_NM = 'purchase' THEN 1 ELSE 0 END) AS completed_purchase
+    FROM LOGS  -- 전체 세션을 대상으로 조회
+    GROUP BY SESS_ID
+)
+
+SELECT 
+    COUNT(*) AS total_product_viewers,  -- 상품 페이지를 본 전체 유저 수
+    SUM(viewed_product) AS product_view_users,  -- 상품 페이지 방문한 유저 수
+    SUM(added_to_cart) AS add_to_cart_users,  -- 장바구니에 추가한 유저 수
+    SUM(completed_purchase) AS purchase_users,  -- 구매한 유저 수
+    SUM(CASE WHEN added_to_cart = 0 AND completed_purchase = 0 THEN 1 ELSE 0 END) AS product_exit_users, -- 상품 보고 그냥 나간 유저
+    ROUND(100 * SUM(product_exit_users) / NULLIF(SUM(viewed_product), 0), 2) AS product_exit_pct -- 상품 페이지 이탈률 (%)
+FROM product_users;

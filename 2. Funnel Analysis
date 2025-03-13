@@ -19,23 +19,67 @@ WHERE SITE_ID IN ('UA-110770460-3', 'UA-110770460-1')
 SELECT *
 FROM LOGS;
 
--- 	상품(EVNT_NM = 'product')을 본 사용자가 장바구니(addToCart) 또는 구매(purchase)로 전환하지 않고 이탈한 비율을 확인
-
-product_users AS (
+-- 상품 페이지 체류 시간이 긴 사용자들의 구매 전환 여부 분석
+WITH product_time AS (
+    -- (1) 상품 페이지 체류 시간 계산
     SELECT 
         SESS_ID,
-        MAX(CASE WHEN EVNT_NM = 'product' THEN 1 ELSE 0 END) AS viewed_product,
-        MAX(CASE WHEN EVNT_NM = 'addToCart' THEN 1 ELSE 0 END) AS added_to_cart,
-        MAX(CASE WHEN EVNT_NM = 'purchase' THEN 1 ELSE 0 END) AS completed_purchase
-    FROM LOGS  -- 전체 세션을 대상으로 조회
+        AVG(PG_STAY_TIME) / 1000 AS avg_product_stay_time_sec  -- 밀리초 → 초 변환
+    FROM LOGS
+    WHERE EVNT_NM = 'product'
     GROUP BY SESS_ID
+),
+
+purchase_status AS (
+    -- (2) 구매 여부 확인 (상품을 본 사용자 중 구매한 사람 찾기)
+    SELECT DISTINCT SESS_ID,
+        CASE 
+            WHEN EXISTS (
+                SELECT 1 FROM LOGS l2
+                WHERE l2.SESS_ID = p.SESS_ID AND l2.EVNT_NM = 'purchase'
+            ) THEN '구매 전환'
+            ELSE '구매 미전환'
+        END AS purchase_status
+    FROM product_time p
 )
 
+-- (3) 최종 집계: 체류 시간 & 구매 여부 그룹화
 SELECT 
-    COUNT(*) AS total_product_viewers,  -- 상품 페이지를 본 전체 유저 수
-    SUM(viewed_product) AS product_view_users,  -- 상품 페이지 방문한 유저 수
-    SUM(added_to_cart) AS add_to_cart_users,  -- 장바구니에 추가한 유저 수
-    SUM(completed_purchase) AS purchase_users,  -- 구매한 유저 수
-    SUM(CASE WHEN added_to_cart = 0 AND completed_purchase = 0 THEN 1 ELSE 0 END) AS product_exit_users, -- 상품 보고 그냥 나간 유저
-    ROUND(100 * SUM(product_exit_users) / NULLIF(SUM(viewed_product), 0), 2) AS product_exit_pct -- 상품 페이지 이탈률 (%)
-FROM product_users;
+    ps.purchase_status,
+    COUNT(*) AS user_count,
+    ROUND(AVG(pt.avg_product_stay_time_sec), 2) AS avg_product_stay_time
+FROM purchase_status ps
+JOIN product_time pt ON ps.SESS_ID = pt.SESS_ID
+GROUP BY ps.purchase_status;
+
+
+-- 상품 페이지에서 전환 없이 이탈한 비율 (product_exit_pct) 분석
+WITH product_users AS (
+    -- (1) 상품 페이지를 본 사용자 리스트
+    SELECT DISTINCT SESS_ID
+    FROM LOGS
+    WHERE EVNT_NM = 'product'
+),
+
+conversion_status AS (
+    -- (2) 상품을 본 사용자가 장바구니 또는 구매로 전환했는지 확인
+    SELECT 
+        pu.SESS_ID,
+        CASE 
+            WHEN EXISTS (
+                SELECT 1 FROM LOGS l
+                WHERE l.SESS_ID = pu.SESS_ID AND l.EVNT_NM IN ('addToCart', 'purchase')
+            ) THEN '전환'
+            ELSE '이탈'
+        END AS conversion_status
+    FROM product_users pu
+)
+
+-- (3) 최종 집계: 상품 페이지 이탈 비율 계산
+SELECT 
+    COUNT(*) AS total_product_viewers,
+    SUM(CASE WHEN conversion_status = '전환' THEN 1 ELSE 0 END) AS converted_users,
+    SUM(CASE WHEN conversion_status = '이탈' THEN 1 ELSE 0 END) AS product_exit_users,
+    ROUND(100 * SUM(CASE WHEN conversion_status = '이탈' THEN 1 ELSE 0 END) 
+        / NULLIF(COUNT(*), 0), 2) AS product_exit_pct  -- 이탈률 계산
+FROM conversion_status;

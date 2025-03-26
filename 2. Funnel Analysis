@@ -91,7 +91,8 @@ ORDER BY product_exit_pct DESC;  -- 이탈률 높은 순으로 정렬
 
 
 
--- ✅ 고객 등급별 퍼널 분석 (EVNT_ACTN 기반): 전환율, 이탈율, 체류시간
+
+-- ✅ 고객 등급별 퍼널 분석 (EVNT_ACTN 기반): 전환율(%), 이탈율, 체류시간 보정
 
 WITH BASE_LOGS AS (
     SELECT 
@@ -99,10 +100,20 @@ WITH BASE_LOGS AS (
         NEW_INCS_NO,
         CUST_GRD_NM,
         EVNT_ACTN,
-        LEAD(PG_STAY_TIME, 1) OVER (PARTITION BY SESS_ID ORDER BY LOG_DTTM) / 1000 AS PG_STAY_SEC  -- 다음 행에서 시간 당겨오기
+        PG_STAY_TIME,
+        LEAD(PG_STAY_TIME, 1) OVER (PARTITION BY SESS_ID ORDER BY LOG_DTTM) AS NEXT_PG_STAY_TIME
     FROM CDP.SF_CDPDW.F_LOG_GA_HIST
     WHERE EVNT_ACTN IN ('product', 'Scroll', 'checkout1', 'checkout2', 'checkout3', 'checkout4', 'purchase')
       AND STND_YMD BETWEEN '2024-02-01' AND '2024-03-31'
+),
+
+LOGS_CLEANED AS (
+    SELECT *,
+           CASE 
+             WHEN EVNT_ACTN = 'product' THEN COALESCE(NEXT_PG_STAY_TIME, PG_STAY_TIME) / 1000  -- 초 단위
+             ELSE NULL 
+           END AS product_stay_sec
+    FROM BASE_LOGS
 ),
 
 FUNNEL_FLAGGED AS (
@@ -117,8 +128,8 @@ FUNNEL_FLAGGED AS (
         MAX(CASE WHEN EVNT_ACTN = 'checkout3' THEN 1 ELSE 0 END) AS has_checkout3,
         MAX(CASE WHEN EVNT_ACTN = 'checkout4' THEN 1 ELSE 0 END) AS has_checkout4,
         MAX(CASE WHEN EVNT_ACTN = 'purchase' THEN 1 ELSE 0 END) AS has_purchase,
-        SUM(CASE WHEN EVNT_ACTN = 'product' THEN PG_STAY_SEC ELSE 0 END) AS product_stay_sec
-    FROM BASE_LOGS
+        ROUND(SUM(product_stay_sec), 2) AS product_stay_sec
+    FROM LOGS_CLEANED
     GROUP BY SESS_ID, NEW_INCS_NO, CUST_GRD_NM
 )
 
@@ -126,13 +137,14 @@ SELECT
     CUST_GRD_NM,
     COUNT(*) AS total_sessions,
     COUNT_IF(has_product = 1) AS product_views,
-    COUNT_IF(has_product = 1 AND has_checkout1 = 1) AS product_to_checkout1,
-    COUNT_IF(has_product = 1 AND has_checkout2 = 1) AS product_to_checkout2,
-    COUNT_IF(has_product = 1 AND has_checkout3 = 1) AS product_to_checkout3,
-    COUNT_IF(has_product = 1 AND has_checkout4 = 1) AS product_to_checkout4,
-    COUNT_IF(has_product = 1 AND has_purchase = 1) AS product_to_purchase,
-    COUNT_IF(has_product = 1 AND has_checkout1 = 0 AND has_purchase = 0) AS product_exit_only,
-    ROUND(AVG(CASE WHEN has_product = 1 THEN product_stay_sec END), 2) AS avg_product_stay_sec
+    ROUND(COUNT_IF(has_scroll = 1) * 1.0 / NULLIF(COUNT_IF(has_product = 1), 0), 4) AS pct_product_to_scroll,
+    ROUND(COUNT_IF(has_checkout1 = 1) * 1.0 / NULLIF(COUNT_IF(has_product = 1), 0), 4) AS pct_product_to_checkout1,
+    ROUND(COUNT_IF(has_checkout2 = 1) * 1.0 / NULLIF(COUNT_IF(has_checkout1 = 1), 0), 4) AS pct_checkout1_to_checkout2,
+    ROUND(COUNT_IF(has_checkout3 = 1) * 1.0 / NULLIF(COUNT_IF(has_checkout2 = 1), 0), 4) AS pct_checkout2_to_checkout3,
+    ROUND(COUNT_IF(has_checkout4 = 1) * 1.0 / NULLIF(COUNT_IF(has_checkout3 = 1), 0), 4) AS pct_checkout3_to_checkout4,
+    ROUND(COUNT_IF(has_purchase = 1) * 1.0 / NULLIF(COUNT_IF(has_checkout4 = 1), 0), 4) AS pct_checkout4_to_purchase,
+    ROUND(COUNT_IF(has_product = 1 AND has_checkout1 = 0 AND has_purchase = 0) * 1.0 / NULLIF(COUNT_IF(has_product = 1), 0), 4) AS pct_product_exit_only,
+    ROUND(AVG(product_stay_sec), 2) AS avg_product_stay_sec
 FROM FUNNEL_FLAGGED
 GROUP BY CUST_GRD_NM
 ORDER BY total_sessions DESC;

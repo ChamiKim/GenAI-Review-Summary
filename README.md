@@ -45,3 +45,31 @@ SELECT L.*, ORD.PRD_CD, ORD.POS_NET_PRD_SAL_AMT
 FROM LOGS L LEFT JOIN ORDER_CUSTS ORD ON (L.SESS_ID = ORD.SESS_ID) AND (L.NEW_INCS_NO = ORD.INCS_NO) AND (L.GOOGLE_CID = ORD.GOOGLE_CID)
 WHERE EVNT_NM IN ('Scroll', 'product', 'checkout1', 'checkout2', 'checkot3', 'checkout4', 'addToCart', 'purchase')
 ORDER BY LOG_DTTM, SESS_ID, NEW_INCS_NO, LOG_ORDER
+
+
+
+
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# 1. AGE가 999인 행 제거
+df = df[df['AGE'] != 999]
+
+# 2. EMP_YN, SEX_CD의 'Z' 제거
+df = df[~df['EMP_YN'].isin(['Z']) & ~df['SEX_CD'].isin(['Z'])]
+
+# 3. PRD_CNT 이상치 시각화
+plt.figure(figsize=(8, 5))
+sns.boxplot(x=df['PRD_CNT'])
+plt.title("Boxplot of PRD_CNT")
+plt.show()
+
+# 4. IQR 기반 이상치 제거
+Q1 = df['PRD_CNT'].quantile(0.25)
+Q3 = df['PRD_CNT'].quantile(0.75)
+IQR = Q3 - Q1
+lower = Q1 - 1.5 * IQR
+upper = Q3 + 1.5 * IQR
+df = df[(df['PRD_CNT'] >= lower) & (df['PRD_CNT'] <= upper)]

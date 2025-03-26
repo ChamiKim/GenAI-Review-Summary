@@ -87,3 +87,53 @@ SELECT
 FROM conversion_status
 GROUP BY CUST_GRD_NM
 ORDER BY product_exit_pct DESC;  -- 이탈률 높은 순으로 정렬
+
+
+
+
+-- ✅ 고객 등급별 퍼널 분석 (EVNT_ACTN 기반): 전환율, 이탈율, 체류시간
+
+WITH BASE_LOGS AS (
+    SELECT 
+        SESS_ID,
+        NEW_INCS_NO,
+        CUST_GRD_NM,
+        EVNT_ACTN,
+        LEAD(PG_STAY_TIME, 1) OVER (PARTITION BY SESS_ID ORDER BY LOG_DTTM) / 1000 AS PG_STAY_SEC  -- 다음 행에서 시간 당겨오기
+    FROM CDP.SF_CDPDW.F_LOG_GA_HIST
+    WHERE EVNT_ACTN IN ('product', 'Scroll', 'checkout1', 'checkout2', 'checkout3', 'checkout4', 'purchase')
+      AND STND_YMD BETWEEN '2024-02-01' AND '2024-03-31'
+),
+
+FUNNEL_FLAGGED AS (
+    SELECT 
+        SESS_ID,
+        NEW_INCS_NO,
+        CUST_GRD_NM,
+        MAX(CASE WHEN EVNT_ACTN = 'product' THEN 1 ELSE 0 END) AS has_product,
+        MAX(CASE WHEN EVNT_ACTN = 'Scroll' THEN 1 ELSE 0 END) AS has_scroll,
+        MAX(CASE WHEN EVNT_ACTN = 'checkout1' THEN 1 ELSE 0 END) AS has_checkout1,
+        MAX(CASE WHEN EVNT_ACTN = 'checkout2' THEN 1 ELSE 0 END) AS has_checkout2,
+        MAX(CASE WHEN EVNT_ACTN = 'checkout3' THEN 1 ELSE 0 END) AS has_checkout3,
+        MAX(CASE WHEN EVNT_ACTN = 'checkout4' THEN 1 ELSE 0 END) AS has_checkout4,
+        MAX(CASE WHEN EVNT_ACTN = 'purchase' THEN 1 ELSE 0 END) AS has_purchase,
+        SUM(CASE WHEN EVNT_ACTN = 'product' THEN PG_STAY_SEC ELSE 0 END) AS product_stay_sec
+    FROM BASE_LOGS
+    GROUP BY SESS_ID, NEW_INCS_NO, CUST_GRD_NM
+)
+
+SELECT
+    CUST_GRD_NM,
+    COUNT(*) AS total_sessions,
+    COUNT_IF(has_product = 1) AS product_views,
+    COUNT_IF(has_product = 1 AND has_checkout1 = 1) AS product_to_checkout1,
+    COUNT_IF(has_product = 1 AND has_checkout2 = 1) AS product_to_checkout2,
+    COUNT_IF(has_product = 1 AND has_checkout3 = 1) AS product_to_checkout3,
+    COUNT_IF(has_product = 1 AND has_checkout4 = 1) AS product_to_checkout4,
+    COUNT_IF(has_product = 1 AND has_purchase = 1) AS product_to_purchase,
+    COUNT_IF(has_product = 1 AND has_checkout1 = 0 AND has_purchase = 0) AS product_exit_only,
+    ROUND(AVG(CASE WHEN has_product = 1 THEN product_stay_sec END), 2) AS avg_product_stay_sec
+FROM FUNNEL_FLAGGED
+GROUP BY CUST_GRD_NM
+ORDER BY total_sessions DESC;
+

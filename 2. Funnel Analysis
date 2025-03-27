@@ -167,3 +167,174 @@ CUST_GRD_NM	TOTAL_SESSIONS	PRODUCT_VIEWS	PCT_PRODUCT_TO_SCROLL	PCT_PRODUCT_TO_CH
 WELCOME	154584	99038	1.4352	0.5576	0.9797	1.0251	0.5849	0.8968	0.4813	0.00
 그린티클럽	33891	18931	1.6464	0.6182	0.8413	1.0155	0.6400	0.9173	0.4889	0.00
 VIP	29866	18633	1.4776	0.6267	0.8781	1.0164	0.6367	0.9170	0.4522	0.00
+
+
+
+
+
+
+
+-- WITH PRODUCTS AS (
+--     SELECT PRD_CD
+--     FROM CDP.SF_CDPDW.D_CHN_PRD_MSTR
+--     WHERE (CHN_CD = '036' OR (CHN_CD = '031' AND CHN_BRND_NM = 'INNISFREE'))
+--         AND PRD_CD != 'Z'
+-- ), ORDER_CUSTS AS(
+-- SELECT *
+--     FROM CDP.SF_CDPDW.F_LOG_GA_STLM_PRD_HIST 
+--     WHERE SITE_ID IN ('UA-110770460-3', 'UA-110770460-1')
+--           AND STND_YMD BETWEEN '2024-02-01' AND '2024-03-31'
+--           AND PRD_CD IN (SELECT PRD_CD FROM PRODUCTS)
+--     ORDER BY STND_YMD
+-- -- INCS_NO 빈 값 채워주기
+-- ), NEW_INCS_GA AS (
+--     SELECT  *
+--           , COALESCE(INCS_NO, MAX(INCS_NO) OVER (PARTITION BY SESS_ID, GOOGLE_CID)) AS NEW_INCS_NO
+--     FROM CDP.SF_CDPDW.F_LOG_GA_HIST
+-- WHERE SESS_ID IN (SELECT SESS_ID FROM ORDER_CUSTS)
+--       AND SITE_ID IN ('UA-110770460-3', 'UA-110770460-1')
+--       AND STND_YMD BETWEEN '2024-02-01' AND '2024-03-31'
+-- )
+-- -- 조회할 로그 정보
+-- , LOGS AS (
+-- SELECT LOG_DTTM, SITE_ID, WEB_APP_CL_CD, GOOGLE_CID, SESS_ID, INCS_NO, EMP_YN, AGE, SEX_CD, CUST_GRD_NM, PG_NM, PG_TP_VL, ACCM_STAY_TIME_NSS, PG_STAY_TIME, SESS_SN_STAY_TIME
+--        , SESS_SN, EVNT_NM, EVNT_ACTN, EVNT_LABEL, NEW_INCS_NO, ROW_NUMBER() OVER (PARTITION BY SESS_ID, NEW_INCS_NO ORDER BY LOG_DTTM ASC) AS LOG_ORDER
+--        , SUM(SESS_SN_STAY_TIME) OVER (PARTITION BY SESS_ID, NEW_INCS_NO) AS SESS_STAY_TIME
+-- FROM NEW_INCS_GA
+-- ), FINAL AS (
+--     SELECT L.*, ORD.PRD_CD, ORD.POS_NET_PRD_SAL_AMT, COUNT(DISTINCT PRD_CD) OVER (PARTITION BY ORD_NO) AS PRD_CNT
+--            , ROW_NUMBER() OVER (PARTITION BY L.GOOGLE_CID, L.SESS_ID, L.NEW_INCS_NO ORDER BY L.LOG_DTTM ASC) AS FINAL_RN
+--     FROM LOGS L LEFT JOIN ORDER_CUSTS ORD ON (L.SESS_ID = ORD.SESS_ID) AND (L.NEW_INCS_NO = ORD.INCS_NO) AND (L.GOOGLE_CID = ORD.GOOGLE_CID)
+--     WHERE EVNT_NM IN ('Scroll', 'product', 'checkout1', 'checkout2', 'checkot3', 'checkout4', 'addToCart', 'purchase')
+--     ORDER BY LOG_DTTM, SESS_ID, NEW_INCS_NO, LOG_ORDER
+-- )
+-- SELECT *
+-- FROM FINAL
+-- WHERE FINAL_RN = 1
+-- ORDER BY LOG_DTTM, SESS_ID, NEW_INCS_NO
+
+
+-- WITH PRODUCTS AS (
+--     SELECT PRD_CD
+--     FROM CDP.SF_CDPDW.D_CHN_PRD_MSTR
+--     WHERE (CHN_CD = '036' OR (CHN_CD = '031' AND CHN_BRND_NM = 'INNISFREE'))
+--         AND PRD_CD != 'Z'
+-- ), ORDER_CUSTS AS(
+-- SELECT *
+--     FROM CDP.SF_CDPDW.F_LOG_GA_STLM_PRD_HIST 
+--     WHERE SITE_ID IN ('UA-110770460-3', 'UA-110770460-1')
+--           AND STND_YMD BETWEEN '2024-02-01' AND '2024-03-31'
+--           AND PRD_CD IN (SELECT PRD_CD FROM PRODUCTS)
+--     ORDER BY STND_YMD)
+-- SELECT *
+--        , COUNT(DISTINCT PRD_CD) OVER (PARTITION BY ORD_NO) AS PRD_CNT
+-- FROM ORDER_CUSTS
+-- WHERE ORD_NO = '20975186'
+
+
+-- SELECT 
+--     SESS_ID,
+--     SITE_ID,
+--     STND_YMD,
+--     STLM_STP,
+--     prd_info.value:prd_cd::STRING AS PRD_CD  -- JSON에서 prd_cd 추출
+-- FROM CDP.SF_CDPDW.F_LOG_GA_HIST,
+-- LATERAL FLATTEN(input => PARSE_JSON(PRD_INFO)) AS prd_info  -- JSON 배열 펼치기
+-- WHERE STLM_STP = 4
+--   AND SITE_ID IN ('UA-110770460-3', 'UA-110770460-1')
+--   AND SESS_ID = ''
+
+-- 이니스프리몰, 아모레몰 SITE_ID 찾기
+-- SELECT *
+-- FROM CDP.INFORMATION_SCHEMA.COLUMNS
+-- WHERE COLUMN_NAME LIKE '%SITE_ID%'
+
+-- SELECT *
+-- FROM CDP.EXT_CDPODS.GA4_DATASET_LIST;
+
+--  동시 판매 상품 코드 찾기
+-- WITH PRODUCTS AS (
+--     SELECT PRD_CD
+--     FROM CDP.SF_CDPDW.D_CHN_PRD_MSTR
+--     WHERE (CHN_CD = '036' OR (CHN_CD = '031' AND CHN_BRND_NM = 'INNISFREE'))
+--         AND PRD_CD != 'Z'
+--     GROUP BY PRD_CD
+--     HAVING COUNT(DISTINCT CHN_CD) = 2  -- 두 개의 CHN_CD에서 모두 존재하는 상품만 선택
+-- )
+-- SELECT *
+-- FROM CDP.SF_CDPDW.D_CHN_PRD_MSTR
+-- WHERE PRD_CD IN (SELECT PRD_CD FROM PRODUCTS)
+--     AND (CHN_CD = '036' OR (CHN_CD = '031' AND CHN_BRND_NM = 'INNISFREE'))
+--     AND PRD_CD != 'Z';
+
+
+
+
+
+
+-- SELECT SESS_ID, INCS_NO, CUST_GRD_NM, EVNT_NM, EVNT_LABEL, PG_STAY_TIME
+-- FROM CDP.SF_CDPDW.F_LOG_GA_HIST
+-- WHERE EVNT_NM IN ('')
+--       AND STND_YMD BETWEEN '2024-02-01' AND '2024-02-29'
+--       AND SITE_ID = 'UA-110770460-3'
+-- ORDER BY SESS_ID, INCS_NO, LOG_DTTM
+-- LIMIT 1000
+-- WHERE EVNT_NM IN ('product', 'checkout1', 'checkout2', 'checkot3', 'checkout4', 'addToCart', 'purchase')
+--       AND STND_YMD BETWEEN '2024-02-01' AND '2024-02-29'
+
+
+WITH BASE_LOGS AS (
+    SELECT 
+        SESS_ID,
+        INCS_NO,
+        CUST_GRD_NM,
+        EVNT_ACTN,
+        PG_STAY_TIME,
+        LEAD(PG_STAY_TIME, 1) OVER (PARTITION BY SESS_ID ORDER BY LOG_DTTM) AS NEXT_PG_STAY_TIME
+    FROM CDP.SF_CDPDW.F_LOG_GA_HIST
+    WHERE EVNT_ACTN IN ('product', 'Scroll', 'checkout1', 'checkout2', 'checkout3', 'checkout4', 'purchase')
+      AND STND_YMD BETWEEN '2024-03-01' AND '2024-03-31'
+      AND SITE_ID = 'UA-110770460-3' 
+),
+
+LOGS_CLEANED AS (
+    SELECT *,
+           CASE 
+             WHEN EVNT_ACTN = 'product' THEN COALESCE(NEXT_PG_STAY_TIME, PG_STAY_TIME) / 1000  -- 초 단위
+             ELSE NULL 
+           END AS product_stay_sec
+    FROM BASE_LOGS
+),
+
+FUNNEL_FLAGGED AS (
+    SELECT 
+        SESS_ID,
+        INCS_NO,
+        CUST_GRD_NM,
+        MAX(CASE WHEN EVNT_ACTN = 'product' THEN 1 ELSE 0 END) AS has_product,
+        MAX(CASE WHEN EVNT_ACTN = 'Scroll' THEN 1 ELSE 0 END) AS has_scroll,
+        MAX(CASE WHEN EVNT_ACTN = 'checkout1' THEN 1 ELSE 0 END) AS has_checkout1,
+        MAX(CASE WHEN EVNT_ACTN = 'checkout2' THEN 1 ELSE 0 END) AS has_checkout2,
+        MAX(CASE WHEN EVNT_ACTN = 'checkout3' THEN 1 ELSE 0 END) AS has_checkout3,
+        MAX(CASE WHEN EVNT_ACTN = 'checkout4' THEN 1 ELSE 0 END) AS has_checkout4,
+        MAX(CASE WHEN EVNT_ACTN = 'purchase' THEN 1 ELSE 0 END) AS has_purchase,
+        ROUND(SUM(product_stay_sec), 2) AS product_stay_sec
+    FROM LOGS_CLEANED
+    GROUP BY SESS_ID, INCS_NO, CUST_GRD_NM
+)
+
+SELECT
+    CUST_GRD_NM,
+    COUNT(*) AS total_sessions,
+    COUNT_IF(has_product = 1) AS product_views,
+    ROUND(COUNT_IF(has_scroll = 1) * 1.0 / NULLIF(COUNT_IF(has_product = 1), 0), 4) AS pct_product_to_scroll,
+    ROUND(COUNT_IF(has_checkout1 = 1) * 1.0 / NULLIF(COUNT_IF(has_product = 1), 0), 4) AS pct_product_to_checkout1,
+    ROUND(COUNT_IF(has_checkout2 = 1) * 1.0 / NULLIF(COUNT_IF(has_checkout1 = 1), 0), 4) AS pct_checkout1_to_checkout2,
+    ROUND(COUNT_IF(has_checkout3 = 1) * 1.0 / NULLIF(COUNT_IF(has_checkout2 = 1), 0), 4) AS pct_checkout2_to_checkout3,
+    ROUND(COUNT_IF(has_checkout4 = 1) * 1.0 / NULLIF(COUNT_IF(has_checkout3 = 1), 0), 4) AS pct_checkout3_to_checkout4,
+    ROUND(COUNT_IF(has_purchase = 1) * 1.0 / NULLIF(COUNT_IF(has_checkout4 = 1), 0), 4) AS pct_checkout4_to_purchase,
+    ROUND(COUNT_IF(has_product = 1 AND has_checkout1 = 0 AND has_purchase = 0) * 1.0 / NULLIF(COUNT_IF(has_product = 1), 0), 4) AS pct_product_exit_only,
+    ROUND(AVG(product_stay_sec), 2) AS avg_product_stay_sec
+FROM FUNNEL_FLAGGED
+GROUP BY CUST_GRD_NM
+ORDER BY total_sessions DESC;
